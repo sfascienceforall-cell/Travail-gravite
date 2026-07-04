@@ -1,0 +1,133 @@
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#fff;font-family:system-ui,-apple-system,sans-serif;}
+canvas{display:block;border-radius:12px;border:1.5px solid #e8e8e8;touch-action:none;cursor:grab;}
+.fml{font-size:13px;padding:10px 16px;border-radius:20px;background:#f5f5f5;border:1.5px solid #d0d0d0;color:#2c2c2a;margin:6px 0;font-family:ui-monospace,monospace;line-height:1.8;}
+.row{display:flex;align-items:center;gap:10px;margin:6px 0;flex-wrap:wrap;}
+.pill{font-size:13px;font-weight:500;color:#2c2c2a;background:#f5f5f5;border:1.5px solid #d0d0d0;border-radius:20px;padding:6px 14px;white-space:nowrap;}
+.btn{padding:8px 16px;border-radius:20px;font-size:13px;font-weight:500;cursor:pointer;border:1.5px solid #d0d0d0;background:#fff;color:#2c2c2a;}
+.info{font-size:12px;padding:8px 14px;border-radius:20px;background:#f5f5f5;border:1.5px solid #d0d0d0;color:#555;margin:6px 0;font-family:ui-monospace,monospace;line-height:1.8;}
+input[type=range]{flex:1;min-width:110px;}
+</style>
+
+<canvas id="cv" style="width:100%;height:60vh;min-height:400px;"></canvas>
+
+<div class="fml">
+  <b style="color:#E24B4A">F̄ = mḡ</b> (verticale) &nbsp;⇒&nbsp; <b style="color:#0F6E56">W = F̄·d̄ = mg·Δh</b> : on coupe le déplacement en <b style="color:#E24B4A">vertical (W=mg·Δh)</b> + <b style="color:#9aa0a6">horizontal (W=0)</b>. Seul le vertical compte.
+</div>
+
+<div class="row">
+  <span class="pill">🖐️ Attrape la balle et déplace-la</span>
+  <span class="pill" style="border-color:#b5d4f4;color:#185fa5;">m</span>
+  <input type="range" id="m" min="1" max="5" value="2" step="0.5" style="accent-color:#378ADD;max-width:170px;">
+  <span class="pill" id="mv" style="border-color:#b5d4f4;color:#185fa5;">2 kg</span>
+  <button class="btn" onclick="reset()">Effacer le chemin</button>
+</div>
+
+<div class="info" id="info"></div>
+
+<script>
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const RED='#E24B4A',DRED='#a32d2d',BLUE='#378ADD',BLUE_D='#185fa5',GREEN='#1D9E75',GREEN_D='#0F6E56',GREY='#8f9498',AX='#c8ccd0';
+let W=0,H=0,dpr=1,mm=2;
+const g=9.81, mPerPx=0.02;
+let S=null,obj=null,trail=[],drag=false;
+document.getElementById('m').addEventListener('input',e=>{mm=+e.target.value;document.getElementById('mv').textContent=mm+' kg';});
+
+function syncSize(){const r=cv.getBoundingClientRect();dpr=window.devicePixelRatio||1;
+  const nW=Math.round(r.width)||700,nH=Math.round(r.height)||410;
+  if(nW!==W||nH!==H){W=nW;H=nH;cv.width=W*dpr;cv.height=H*dpr;
+    S={x:W*0.24,y:H*0.24}; if(!obj){obj={x:W*0.64,y:H*0.60};trail=[{...obj}];}}
+  ctx.setTransform(dpr,0,0,dpr,0,0);}
+function reset(){trail=[{x:obj.x,y:obj.y}];}
+
+function arrow(x,y,vx,vy,col,w,dash){
+  const len=Math.hypot(vx,vy);if(len<2)return;
+  const ex=x+vx,ey=y+vy;
+  ctx.strokeStyle=col;ctx.lineWidth=w||2.5;ctx.lineCap='round';
+  if(dash)ctx.setLineDash(dash);
+  ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(ex,ey);ctx.stroke();ctx.setLineDash([]);
+  const hs=(w||2.5)*3.0,ang=Math.atan2(vy,vx);
+  ctx.fillStyle=col;ctx.save();ctx.translate(ex,ey);ctx.rotate(ang);
+  ctx.beginPath();ctx.moveTo(hs,0);ctx.lineTo(-hs*0.7,-hs*0.55);ctx.lineTo(-hs*0.7,hs*0.55);ctx.closePath();ctx.fill();ctx.restore();
+}
+function lbl(t,x,y,col,al){ctx.fillStyle=col;ctx.font='700 13px system-ui';ctx.textAlign=al||'center';ctx.fillText(t,x,y);}
+
+function draw(){
+  syncSize();ctx.clearRect(0,0,W,H);ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
+
+  const dx=obj.x-S.x, dy=obj.y-S.y;
+  const V={x:S.x,y:obj.y};   // coin : on descend d'abord (à gauche), puis on va à droite
+
+  // niveaux
+  ctx.strokeStyle='#eceef0';ctx.setLineDash([4,5]);ctx.lineWidth=1.2;
+  ctx.beginPath();ctx.moveTo(20,S.y);ctx.lineTo(W-20,S.y);ctx.moveTo(20,obj.y);ctx.lineTo(W-20,obj.y);ctx.stroke();ctx.setLineDash([]);
+
+  // chemin réel
+  ctx.strokeStyle='#bdd8f2';ctx.lineWidth=3;ctx.lineCap='round';ctx.lineJoin='round';
+  ctx.beginPath();trail.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.stroke();
+
+  // ===== décomposition : VERTICALE d'abord (à gauche, loin de la balle) =====
+  arrow(S.x,S.y,0,dy,RED,3.2);            // composante verticale (rouge, fine) à x = S.x
+  arrow(V.x,V.y,dx,0,GREY,3.2);           // composante horizontale (grise) à y = obj.y
+  arrow(S.x,S.y,dx,dy,BLUE,2.4);          // déplacement total (hypoténuse)
+  // angle droit en V
+  const sgx=Math.sign(dx)||1, sgy=Math.sign(dy)||1;
+  ctx.strokeStyle=GREY;ctx.lineWidth=1.4;ctx.strokeRect(V.x, V.y-sgy*12, sgx*12, sgy*12);
+
+  // labels composantes
+  lbl('Δh vertical',S.x-10,S.y+dy/2,DRED,'right');
+  lbl('W = mg·Δh',S.x-10,S.y+dy/2+16,DRED,'right');
+  lbl('horizontal  ·  W = 0',V.x+dx/2,obj.y+(dy>0?20:-12),GREY);
+  // d̄ au milieu de l'hypoténuse, décalé
+  lbl('d̄',S.x+dx*0.5+ (dy>0?14:-14), S.y+dy*0.5-6, BLUE);
+
+  // départ
+  ctx.fillStyle=GREY;ctx.beginPath();ctx.arc(S.x,S.y,5,0,7);ctx.fill();
+  lbl('départ',S.x,S.y-12,GREY);ctx.font='12px system-ui';
+
+  // gravité + balle
+  arrow(obj.x,obj.y,0,50,RED,3);
+  lbl('mḡ',obj.x+16,obj.y+40,RED,'left');
+  ctx.fillStyle='#fbe6e6';ctx.strokeStyle=RED;ctx.lineWidth=2.5;
+  ctx.beginPath();ctx.arc(obj.x,obj.y,14,0,7);ctx.fill();ctx.stroke();
+
+  // ===== panneau travail =====
+  const dhm=(obj.y-S.y)*mPerPx;
+  const Wtot=mm*g*dhm;
+  let Wpath=0;for(let i=1;i<trail.length;i++)Wpath+=mm*g*(trail[i].y-trail[i-1].y)*mPerPx;
+  const pxW=200, pxX=W-pxW-16, pxY=14;
+  ctx.fillStyle='#ffffff';ctx.strokeStyle='#e4e4e4';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.roundRect(pxX,pxY,pxW,116,12);ctx.fill();ctx.stroke();
+  ctx.textAlign='left';ctx.font='700 12px system-ui';ctx.fillStyle='#333';ctx.fillText('Travail de la gravité',pxX+14,pxY+22);
+  ctx.font='600 12px ui-monospace,monospace';
+  ctx.fillStyle=GREY;ctx.fillText('horizontal : W = 0 J',pxX+14,pxY+43);
+  ctx.fillStyle=DRED;ctx.fillText('vertical : W = mg·Δh',pxX+14,pxY+62);
+  ctx.fillStyle=DRED;ctx.fillText('  = '+mm+'·'+g+'·('+dhm.toFixed(2)+')',pxX+14,pxY+80);
+  ctx.fillStyle=GREEN_D;ctx.font='700 14px ui-monospace,monospace';ctx.fillText('W = '+Wtot.toFixed(1)+' J',pxX+14,pxY+104);
+  // jauge verticale
+  const gX=pxX-28,gTop=pxY+6,gH=104,gW=15;
+  ctx.fillStyle='#f2f2f2';ctx.strokeStyle='#dcdcdc';ctx.beginPath();ctx.roundRect(gX,gTop,gW,gH,6);ctx.fill();ctx.stroke();
+  const maxW=mm*g*((H*0.42)*mPerPx),midY=gTop+gH/2,frac=Math.max(-1,Math.min(1,Wtot/(maxW||1))),hh=frac*gH/2;
+  ctx.fillStyle=Wtot>=0?GREEN:RED;ctx.beginPath();ctx.roundRect(gX,Math.min(midY,midY+hh),gW,Math.abs(hh),4);ctx.fill();
+  ctx.strokeStyle=GREY;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(gX-3,midY);ctx.lineTo(gX+gW+3,midY);ctx.stroke();
+
+  document.getElementById('info').innerHTML=
+    'Δh = '+Math.abs(dhm).toFixed(2)+' m ('+(dhm>=0?'descend ⇒ W>0':'monte ⇒ W<0')+') &nbsp;|&nbsp; '+
+    '<b style="color:'+GREEN_D+'">W = mg·Δh = '+Wtot.toFixed(1)+' J</b> &nbsp;|&nbsp; '+
+    '<b style="color:'+BLUE_D+'">W le long du chemin réel = '+Wpath.toFixed(1)+' J</b> → identique.';
+  requestAnimationFrame(draw);
+}
+
+function getPos(e){const r=cv.getBoundingClientRect();const t=e.touches?e.touches[0]:e;return{x:t.clientX-r.left,y:t.clientY-r.top};}
+function near(p){return Math.hypot(p.x-obj.x,p.y-obj.y)<28;}
+cv.addEventListener('mousedown',e=>{const p=getPos(e);if(near(p)){drag=true;cv.style.cursor='grabbing';}});
+cv.addEventListener('mousemove',e=>{if(!drag)return;const p=getPos(e);obj.x=Math.max(16,Math.min(W-16,p.x));obj.y=Math.max(16,Math.min(H-16,p.y));
+  const l=trail[trail.length-1];if(!l||Math.hypot(p.x-l.x,p.y-l.y)>4)trail.push({x:obj.x,y:obj.y});});
+window.addEventListener('mouseup',()=>{drag=false;cv.style.cursor='grab';});
+cv.addEventListener('touchstart',e=>{const p=getPos(e);if(near(p))drag=true;},{passive:false});
+cv.addEventListener('touchmove',e=>{if(!drag)return;e.preventDefault();const p=getPos(e);obj.x=Math.max(16,Math.min(W-16,p.x));obj.y=Math.max(16,Math.min(H-16,p.y));
+  const l=trail[trail.length-1];if(!l||Math.hypot(p.x-l.x,p.y-l.y)>4)trail.push({x:obj.x,y:obj.y});},{passive:false});
+window.addEventListener('touchend',()=>{drag=false;});
+draw();
+</script>
